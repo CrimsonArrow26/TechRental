@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, CircuitBoard, Key } from 'lucide-react';
+import { Mail, Lock, CircuitBoard, Key, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { signInWithRegistration } from '../lib/supabase';
 
 const Login: React.FC = () => {
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login, isLoading } = useAuth();
   const navigate = useNavigate();
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     
     if (!registrationNumber || !password) {
       setError('Please enter both registration number and password');
@@ -20,18 +22,18 @@ const Login: React.FC = () => {
     }
     
     try {
-      // Use Supabase registration number login
+      console.log('Querying for:', registrationNumber);
       const user = await signInWithRegistration(registrationNumber, password);
-      login(user.email, password); // Optionally update AuthContext
+      await login(registrationNumber, password);
       navigate('/');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during login');
+      setError('Invalid credentials');
     }
   };
   
   // Sample credentials
   const sampleCredentials = [
-    { role: 'Student', email: 'student@college.edu', password: 'password', name: 'Vedant' },
+    { role: 'Student', email: 'student@college.edu', password: 'password' },
     { role: 'Staff', email: 'staff@college.edu', password: 'password' },
     { role: 'Admin', email: 'admin@college.edu', password: 'password' },
   ];
@@ -89,14 +91,23 @@ const Login: React.FC = () => {
                 <input
                   id="password"
                   name="password"
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                  className="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 pr-10 sm:text-sm border-gray-300 rounded-md"
                   placeholder="••••••••"
                 />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
             </div>
 
