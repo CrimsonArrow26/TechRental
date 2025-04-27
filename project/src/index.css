@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary-50: #eef5ff;
+  --color-primary-100: #d9e7ff;
+  --color-primary-200: #bcd3ff;
+  --color-primary-300: #8eb6ff;
+  --color-primary-400: #5a8fff;
+  --color-primary-500: #3366ff;
+  --color-primary-600: #1a4cff;
+  --color-primary-700: #0a2463;
+  --color-primary-800: #0c2056;
+  --color-primary-900: #091342;
+  --color-primary-950: #060c29;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better focus styles */
+*:focus-visible {
+  outline: 2px solid var(--color-primary-500);
+  outline-offset: 2px;
+}
+
+/* Fade in animation for page transitions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+main {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Hover card animation */
+.hover-card-animation {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.hover-card-animation:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
