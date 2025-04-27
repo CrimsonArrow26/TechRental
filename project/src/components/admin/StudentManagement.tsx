@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Clock, CheckCircle, X } from 'lucide-react';
-import { searchStudents, processReturn } from '../../lib/api';
+import { AlertCircle, Search } from 'lucide-react';
+import { useInventory } from '../../contexts/InventoryContext';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { getStudentName } from '../../utils/studentUtils';
+import { supabase } from '../../lib/supabaseClient';
 
 interface Student {
   id: string;
@@ -22,75 +26,108 @@ interface Student {
   }>;
 }
 
-const StudentManagement: React.FC<{ searchQuery: string }> = ({ searchQuery }) => {
-  const [students, setStudents] = useState<Student[]>([]);
+interface StudentManagementProps {
+  searchQuery: string;
+  selectedStudentId: string | null;
+  setSelectedStudentId: (id: string | null) => void;
+}
+
+const StudentManagement: React.FC<StudentManagementProps> = ({ searchQuery, selectedStudentId, setSelectedStudentId }) => {
+  const { products, handleReturnItem, rentProduct } = useInventory();
+  const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
-  const [showReturnConfirm, setShowReturnConfirm] = useState<string | null>(null);
+  const [showReturnModal, setShowReturnModal] = useState<string | null>(null);
   const [returnSuccess, setReturnSuccess] = useState<string | null>(null);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
+  // Rent modal state
+  const [rentModalProduct, setRentModalProduct] = useState<any | null>(null);
+  const [rentModalSerial, setRentModalSerial] = useState<string>('');
+  const [rentModalDueDate, setRentModalDueDate] = useState<Date | null>(null);
+  const [renting, setRenting] = useState(false);
+  const [rentSuccess, setRentSuccess] = useState<string | null>(null);
+  const [showRentModal, setShowRentModal] = useState(false);
+  const [studentDetails, setStudentDetails] = useState<any>(null);
+  const [studentLoading, setStudentLoading] = useState(false);
 
   useEffect(() => {
-    const delayedSearch = setTimeout(() => {
-      if (searchQuery.length >= 2) {
-        loadStudents(searchQuery);
-      } else if (searchQuery.length === 0) {
-        // Load all students when search is empty
-        loadAllStudents();
-      }
-    }, 300);
-
-    return () => clearTimeout(delayedSearch);
-  }, [searchQuery]);
-
-  const loadAllStudents = async () => {
-    try {
-      setLoading(true);
-      // This would call an API endpoint that returns all students
-      const data = await searchStudents('');
-      setStudents(data);
-    } catch (err) {
-      setError('Failed to load students');
-    } finally {
-      setLoading(false);
+    const studentMap: Record<string, any> = {};
+    products.forEach((product: any) => {
+      product.rentedSerialNumbers.forEach((rental: any) => {
+        if (rental.studentId) {
+          if (!studentMap[rental.studentId]) {
+            studentMap[rental.studentId] = {
+              studentId: rental.studentId,
+              studentName: getStudentName(rental.studentId),
+              rentals: [],
+            };
+          }
+          studentMap[rental.studentId].rentals.push({
+            id: `${product.id}-${rental.serialNumber}`,
+            productName: product.name,
+            mainCategory: product.mainCategory,
+            subCategory: product.subCategory,
+            serialNumber: rental.serialNumber,
+            issuedDate: rental.issuedDate,
+            dueDate: rental.dueDate,
+          });
+        }
+      });
+    });
+    let studentsArr = Object.values(studentMap).filter((student: any) =>
+      student.rentals.length > 0
+    );
+    const searchTerm = (searchQuery || localSearchQuery).toLowerCase();
+    if (searchTerm) {
+      studentsArr = studentsArr.filter((student: any) =>
+        student.studentName.toLowerCase().includes(searchTerm) ||
+        student.studentId.toLowerCase().includes(searchTerm) ||
+        student.rentals.some((r: any) =>
+          r.serialNumber.toLowerCase().includes(searchTerm)
+        )
+      );
     }
+    setStudents(studentsArr);
+    setLoading(false);
+  }, [products, searchQuery, localSearchQuery]);
+
+  useEffect(() => {
+    if (selectedStudentId) {
+      setStudentLoading(true);
+      supabase
+        .from('students')
+        .select('registration_number, name, email, mobile_number')
+        .eq('id', selectedStudentId)
+        .single()
+        .then(({ data }) => setStudentDetails(data))
+        .finally(() => setStudentLoading(false));
+    }
+  }, [selectedStudentId]);
+
+  const handleReturnClick = (rentalId: string) => {
+    setShowReturnModal(rentalId);
   };
 
-  const loadStudents = async (query: string) => {
+  const handleReturnConfirm = async (rentalId: string) => {
     try {
-      setLoading(true);
-      const data = await searchStudents(query);
-      setStudents(data);
-    } catch (err) {
-      setError('Failed to load students');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleReturn = async (rentalId: string) => {
-    try {
-      await processReturn(rentalId);
-      setReturnSuccess(`Successfully returned item`);
-      setShowReturnConfirm(null);
-      
-      // Refresh student data
-      if (searchQuery.length >= 2) {
-        loadStudents(searchQuery);
-      } else {
-        loadAllStudents();
-      }
-      
-      setTimeout(() => {
-        setReturnSuccess(null);
-      }, 3000);
+      const [productId, serialNumber] = rentalId.split('-');
+      handleReturnItem(productId, serialNumber);
+      setShowReturnModal(null);
+      setReturnSuccess('Item returned successfully');
+      setTimeout(() => setReturnSuccess(null), 3000);
+      setStudents((prevStudents: any[]) =>
+        prevStudents.map((student: any) => ({
+          ...student,
+          rentals: student.rentals.map((rental: any) =>
+            rental.id === rentalId
+              ? { ...rental, status: 'returned' }
+              : rental
+          ),
+        }))
+      );
     } catch (err) {
       setError('Failed to process return');
     }
-  };
-
-  const isOverdue = (dueDate: string) => {
-    return new Date() > new Date(dueDate);
   };
 
   if (loading && students.length === 0) {
@@ -112,122 +149,351 @@ const StudentManagement: React.FC<{ searchQuery: string }> = ({ searchQuery }) =
     );
   }
 
-  if (searchQuery.length < 2 && searchQuery.length > 0) {
+  if (!selectedStudentId) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        Enter at least 2 characters to search for students
+      <div className="space-y-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-800">Students with Active Rentals</h2>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search by name, ID, or serial number..."
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+          </div>
+        </div>
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Student Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Registration Number
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Active Rentals
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {students.map((student: any) => (
+                <tr
+                  key={student.studentId}
+                  className="hover:bg-gray-50"
+                >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-blue-800">
+                    <button
+                      className="focus:outline-none hover:underline-none active:underline-none text-blue-800 font-extrabold p-0 bg-transparent border-none cursor-pointer"
+                      style={{ textDecoration: 'none' }}
+                      onClick={() => setSelectedStudentId(student.studentId)}
+                    >
+                      {student.studentName}
+                    </button>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {student.registration_number || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {student.email || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {student.rentals.length}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <button
+                      onClick={() => setSelectedStudentId(student.studentId)}
+                      className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
 
-  if (students.length === 0) {
-    return (
-      <div className="text-center py-12 text-gray-500">
-        {searchQuery.length >= 2 
-          ? `No students found matching "${searchQuery}"`
-          : "No students found in the system"}
-      </div>
-    );
-  }
+  const student = students.find((s: any) => s.studentId === selectedStudentId);
+  const availableProducts = products.filter((p: any) => p.availableQuantity > 0);
 
   return (
     <div className="space-y-6">
+      {/* Student Info Card from Supabase */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-2">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Student Information</h2>
+        {studentLoading ? (
+          <div>Loading...</div>
+        ) : studentDetails ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <span className="text-gray-500 font-medium">EN Number:</span>
+              <span className="ml-2 text-gray-900">{studentDetails.registration_number}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 font-medium">Mobile Number:</span>
+              <span className="ml-2 text-gray-900">{studentDetails.mobile_number}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 font-medium">Email ID:</span>
+              <span className="ml-2 text-gray-900">{studentDetails.email}</span>
+            </div>
+          </div>
+        ) : (
+          <div>No student details found.</div>
+        )}
+      </div>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center">
+          <button
+            onClick={() => setSelectedStudentId(null)}
+            className="text-primary-600 hover:text-primary-700 mr-4"
+          >
+            ← Back to Students
+          </button>
+          <h2 className="text-xl font-semibold text-gray-800">
+            {student.studentName}'s Active Rentals
+          </h2>
+        </div>
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search by serial number..."
+            value={localSearchQuery}
+            onChange={(e) => setLocalSearchQuery(e.target.value)}
+            className="pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+        </div>
+      </div>
       {returnSuccess && (
-        <div className="bg-green-50 border border-green-200 rounded-md p-4">
-          <div className="flex">
-            <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
-            <p className="text-green-700">{returnSuccess}</p>
+        <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
+          <p className="text-green-700">{returnSuccess}</p>
+        </div>
+      )}
+      {rentSuccess && (
+        <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
+          <p className="text-green-700">{rentSuccess}</p>
+        </div>
+      )}
+      {/* Rentals Table Grouped by Main Category with Proper Filtering */}
+      {(() => {
+        // Group rentals by mainCategory
+        const grouped = student.rentals.reduce((acc: any, rental: any) => {
+          if (!acc[rental.mainCategory]) acc[rental.mainCategory] = [];
+          acc[rental.mainCategory].push(rental);
+          return acc;
+        }, {});
+        return Object.entries(grouped).map(([mainCategory, rentals]) => {
+          // Filter rentals for each section
+          let filteredRentals = rentals as any[];
+          if (mainCategory.toLowerCase().includes('arduino')) {
+            filteredRentals = filteredRentals.filter(r =>
+              (r.subCategory && r.subCategory.toLowerCase().includes('arduino')) ||
+              (r.productName && r.productName.toLowerCase().includes('arduino'))
+            );
+          } else if (mainCategory.toLowerCase().includes('raspberry')) {
+            filteredRentals = filteredRentals.filter(r =>
+              (r.subCategory && r.subCategory.toLowerCase().includes('raspberry')) ||
+              (r.productName && r.productName.toLowerCase().includes('raspberry'))
+            );
+          }
+          if (filteredRentals.length === 0) return null;
+          return (
+            <div key={mainCategory} className="mb-8">
+              <h3 className="text-lg font-semibold px-6 py-4 border-b bg-gray-50">{mainCategory}</h3>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Item
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Serial Number
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Issue Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Due Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredRentals
+                      .filter((rental: any) =>
+                        !localSearchQuery ||
+                        rental.serialNumber.toLowerCase().includes(localSearchQuery.toLowerCase())
+                      )
+                      .map((rental: any) => (
+                        <tr key={rental.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {rental.productName}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {rental.serialNumber}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(rental.issuedDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(rental.dueDate).toLocaleDateString()}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <button
+                              onClick={() => handleReturnClick(rental.id)}
+                              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+                            >
+                              Return Item
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        });
+      })()}
+      {/* Rent Item Button and Modal */}
+      <div className="mt-8">
+        <button
+          className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+          onClick={() => setShowRentModal(true)}
+        >
+          Rent Item
+        </button>
+      </div>
+      {showRentModal && student && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Rent Item to {student.studentName}</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Component</label>
+              <select
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                value={rentModalProduct ? rentModalProduct.id : ''}
+                onChange={e => {
+                  const prod = products.find((p: any) => p.id === e.target.value);
+                  setRentModalProduct(prod);
+                  setRentModalSerial('');
+                }}
+              >
+                <option value="">Select Component</option>
+                {availableProducts.map((product: any) => (
+                  <option key={product.id} value={product.id}>{product.name}</option>
+                ))}
+              </select>
+            </div>
+            {rentModalProduct && (
+              <>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Serial Number</label>
+                  <select
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    value={rentModalSerial}
+                    onChange={e => setRentModalSerial(e.target.value)}
+                  >
+                    <option value="">Select Serial Number</option>
+                    {rentModalProduct.serialNumbers.filter((sn: string) =>
+                      !rentModalProduct.rentedSerialNumbers.some((r: any) => r.serialNumber === sn)
+                    ).map((sn: string) => (
+                      <option key={sn} value={sn}>{sn}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                  {/* @ts-ignore */}
+                  <DatePicker
+                    selected={rentModalDueDate}
+                    onChange={(date: Date | null) => setRentModalDueDate(date)}
+                    minDate={new Date()}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    placeholderText="Select due date"
+                  />
+                </div>
+              </>
+            )}
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setShowRentModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                disabled={renting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!rentModalProduct || !rentModalSerial || !rentModalDueDate) return;
+                  setRenting(true);
+                  try {
+                    await rentProduct(
+                      rentModalProduct.id,
+                      student.studentId,
+                      rentModalDueDate.toISOString().split('T')[0],
+                      rentModalSerial
+                    );
+                    setShowRentModal(false);
+                    setRentModalProduct(null);
+                    setRentModalSerial('');
+                    setRentModalDueDate(null);
+                    setRentSuccess('Component issued successfully!');
+                    setTimeout(() => setRentSuccess(null), 3000);
+                  } finally {
+                    setRenting(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+                disabled={!rentModalProduct || !rentModalSerial || !rentModalDueDate || renting}
+              >
+                Confirm Rent
+              </button>
+            </div>
           </div>
         </div>
       )}
-
-      {students.map(student => (
-        <div key={student.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div 
-            className="px-6 py-4 cursor-pointer hover:bg-gray-50"
-            onClick={() => setSelectedStudent(selectedStudent === student.id ? null : student.id)}
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-medium text-gray-900">{student.name}</h3>
-                <p className="text-sm text-gray-500">ID: {student.registration_number}</p>
-              </div>
-              <div className="text-sm text-gray-500">
-                {student.rentals.length} active {student.rentals.length === 1 ? 'rental' : 'rentals'}
-              </div>
+      {/* Return Modal */}
+      {showReturnModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Return</h3>
+            <p className="text-gray-600 mb-4">Are you sure you want to return this item?</p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowReturnModal(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleReturnConfirm(showReturnModal)}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+              >
+                Confirm Return
+              </button>
             </div>
           </div>
-
-          {selectedStudent === student.id && (
-            <div className="border-t border-gray-200">
-              {student.rentals.length > 0 ? (
-                <div className="divide-y divide-gray-200">
-                  {student.rentals.map(rental => (
-                    <div key={rental.id} className="px-6 py-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{rental.item.name}</h4>
-                          <p className="text-sm text-gray-500">
-                            Serial: {rental.serial_number.serial_number}
-                          </p>
-                          <div className="flex items-center mt-1">
-                            <Clock className="h-4 w-4 text-gray-400 mr-1" />
-                            <span className="text-sm text-gray-500">
-                              Issued: {new Date(rental.issued_date).toLocaleDateString()}
-                            </span>
-                            <span className="mx-2 text-gray-300">|</span>
-                            <span className="text-sm text-gray-500">
-                              Due: {new Date(rental.due_date).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-4">
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            isOverdue(rental.due_date)
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-green-100 text-green-800'
-                          }`}>
-                            {isOverdue(rental.due_date) ? 'Overdue' : 'Active'}
-                          </span>
-
-                          {showReturnConfirm === rental.id ? (
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => handleReturn(rental.id)}
-                                className="px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-                              >
-                                Confirm
-                              </button>
-                              <button
-                                onClick={() => setShowReturnConfirm(null)}
-                                className="p-1 text-gray-400 hover:text-gray-600"
-                              >
-                                <X className="h-5 w-5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setShowReturnConfirm(rental.id)}
-                              className="px-3 py-1 border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50"
-                            >
-                              Return
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-6 py-4 text-center text-gray-500">
-                  No active rentals for this student
-                </div>
-              )}
-            </div>
-          )}
         </div>
-      ))}
+      )}
     </div>
   );
 };

@@ -1,48 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Clock, ChevronRight } from 'lucide-react';
-import { getCategories, getItemsByCategory } from '../../lib/api';
-import type { CategoryWithSubcategories, ItemWithDetails } from '../../lib/types';
+import { AlertCircle, Clock, ChevronRight, Package } from 'lucide-react';
+import { useInventory } from '../../contexts/InventoryContext';
 
-const ActiveRentals: React.FC = () => {
-  const [categories, setCategories] = useState<CategoryWithSubcategories[]>([]);
+interface ActiveRentalsProps {
+  onStudentClick: (studentId: string) => void;
+}
+
+const ActiveRentals: React.FC<ActiveRentalsProps> = ({ onStudentClick }) => {
+  const { categories, getRentalsByCategory, handleReturnItem } = useInventory();
   const [selectedMainCategory, setSelectedMainCategory] = useState<string | null>(null);
   const [selectedSubCategory, setSelectedSubCategory] = useState<string | null>(null);
-  const [items, setItems] = useState<ItemWithDetails[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showReturnModal, setShowReturnModal] = useState<string | null>(null);
+  const [returnSuccess, setReturnSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    loadCategories();
-  }, []);
-
-  useEffect(() => {
-    if (selectedSubCategory) {
-      loadItems(selectedSubCategory);
-    }
-  }, [selectedSubCategory]);
-
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data);
-    } catch (err) {
-      setError('Failed to load categories');
-    } finally {
+    if (selectedMainCategory) {
+      const rentals = getRentalsByCategory(selectedMainCategory);
+      setItems(rentals);
       setLoading(false);
     }
-  };
-
-  const loadItems = async (categoryId: string) => {
-    try {
-      setLoading(true);
-      const data = await getItemsByCategory(categoryId);
-      setItems(data);
-    } catch (err) {
-      setError('Failed to load items');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [selectedMainCategory, getRentalsByCategory]);
 
   const handleMainCategorySelect = (categoryId: string) => {
     setSelectedMainCategory(categoryId);
@@ -52,6 +32,26 @@ const ActiveRentals: React.FC = () => {
 
   const handleSubCategorySelect = (categoryId: string) => {
     setSelectedSubCategory(categoryId);
+  };
+
+  const handleReturnClick = (itemId: string) => {
+    setShowReturnModal(itemId);
+  };
+
+  const handleReturnConfirm = async (itemId: string, serialNumber: string) => {
+    try {
+      handleReturnItem(itemId, serialNumber);
+      setShowReturnModal(null);
+      setReturnSuccess('Item returned successfully');
+      setTimeout(() => setReturnSuccess(null), 3000);
+      // Refresh the items list
+      if (selectedMainCategory) {
+        const rentals = getRentalsByCategory(selectedMainCategory);
+        setItems(rentals);
+      }
+    } catch (err) {
+      setError('Failed to process return');
+    }
   };
 
   const isOverdue = (dueDate: string) => {
@@ -77,38 +77,24 @@ const ActiveRentals: React.FC = () => {
     );
   }
 
-  // Render main categories grid view
+  // Render main categories
   if (!selectedMainCategory) {
     return (
       <div className="space-y-6">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">Browse Categories</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Component Categories</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {categories.map(category => (
             <div 
-              key={category.id}
-              onClick={() => handleMainCategorySelect(category.id)}
+              key={category.main}
+              onClick={() => handleMainCategorySelect(category.main)}
               className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transition-transform hover:-translate-y-1 hover:shadow-lg"
             >
-              <div className="h-40 bg-orange-500 flex items-center justify-center p-4">
-                {category.imageUrl ? (
-                  <img 
-                    src={category.imageUrl} 
-                    alt={category.name} 
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center">
-                    <span className="text-white text-4xl">{category.name.charAt(0)}</span>
-                  </div>
-                )}
-              </div>
-              <div className="p-4">
-                <h3 className="text-lg font-medium text-gray-900">{category.name}</h3>
-                {category.subcategories && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {category.subcategories.length} subcategories
-                  </p>
-                )}
+              <div className="p-6">
+                <Package className="h-8 w-8 text-primary-600 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">{category.main}</h3>
+                <p className="mt-2 text-sm text-gray-500">
+                  {category.sub.length} subcategories
+                </p>
               </div>
             </div>
           ))}
@@ -117,51 +103,28 @@ const ActiveRentals: React.FC = () => {
     );
   }
 
-  // Get the selected main category
-  const mainCategory = categories.find(c => c.id === selectedMainCategory);
-  
-  // Render subcategories grid view
-  if (!selectedSubCategory && mainCategory) {
+  // Render subcategories
+  if (!selectedSubCategory) {
+    const mainCategory = categories.find(c => c.main === selectedMainCategory);
     return (
       <div className="space-y-6">
-        <div className="flex items-center mb-4">
-          <button 
+        <div className="flex items-center mb-6">
+          <button
             onClick={() => setSelectedMainCategory(null)}
-            className="text-primary-600 hover:text-primary-800 mr-2"
+            className="text-primary-600 hover:text-primary-700 mr-4"
           >
             ← Back to Categories
           </button>
-          <h2 className="text-xl font-semibold text-gray-800">{mainCategory.name}</h2>
+          <h2 className="text-xl font-semibold text-gray-800">{mainCategory?.main}</h2>
         </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {mainCategory.subcategories?.map(subCategory => (
-            <div 
-              key={subCategory.id}
-              onClick={() => handleSubCategorySelect(subCategory.id)}
-              className="bg-white rounded-lg shadow-md overflow-hidden cursor-pointer transition-transform hover:-translate-y-1 hover:shadow-lg"
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+          {mainCategory?.sub.map(subcategory => (
+            <div
+              key={subcategory}
+              onClick={() => handleSubCategorySelect(subcategory)}
+              className="bg-white rounded-lg shadow-md p-6 cursor-pointer transition-transform hover:-translate-y-1 hover:shadow-lg"
             >
-              <div className="h-40 bg-indigo-100 flex items-center justify-center p-4">
-                {subCategory.imageUrl ? (
-                  <img 
-                    src={subCategory.imageUrl} 
-                    alt={subCategory.name} 
-                    className="max-h-full max-w-full object-contain"
-                  />
-                ) : (
-                  <div className="w-16 h-16 bg-indigo-200 rounded-full flex items-center justify-center">
-                    <span className="text-indigo-700 text-2xl">{subCategory.name.charAt(0)}</span>
-                  </div>
-                )}
-              </div>
-              <div className="p-4">
-                <h3 className="text-lg font-medium text-gray-900">{subCategory.name}</h3>
-                {subCategory.items && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {subCategory.items.length} items
-                  </p>
-                )}
-              </div>
+              <h3 className="text-lg font-medium text-gray-900">{subcategory}</h3>
             </div>
           ))}
         </div>
@@ -169,77 +132,111 @@ const ActiveRentals: React.FC = () => {
     );
   }
 
-  // Find the selected subcategory
-  const subCategory = mainCategory?.subcategories?.find(s => s.id === selectedSubCategory);
+  // Render items in subcategory
+  const mainCategory = categories.find(c => c.main === selectedMainCategory);
 
-  // Render items and their rentals
   return (
     <div className="space-y-6">
-      <div className="flex items-center mb-4">
-        <button 
+      {returnSuccess && (
+        <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
+          <p className="text-green-700">{returnSuccess}</p>
+        </div>
+      )}
+
+      <div className="flex items-center mb-6">
+        <button
           onClick={() => setSelectedSubCategory(null)}
-          className="text-primary-600 hover:text-primary-800 mr-2"
+          className="text-primary-600 hover:text-primary-700 mr-4"
         >
-          ← Back to {mainCategory?.name}
+          ← Back to {mainCategory?.main}
         </button>
-        <h2 className="text-xl font-semibold text-gray-800">{subCategory?.name}</h2>
+        <h2 className="text-xl font-semibold text-gray-800">{selectedSubCategory}</h2>
       </div>
-      
-      {loading ? (
-        <div className="flex justify-center items-center h-48">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-        </div>
-      ) : items.length === 0 ? (
-        <div className="p-6 text-center text-gray-500">
-          No items found in this category
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {items.map(item => (
-            <div key={item.id} className="bg-white rounded-lg border shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium text-gray-900">{item.name}</h3>
-                  <span className="text-sm text-gray-500">
-                    {item.available_quantity} / {item.total_quantity} available
-                  </span>
-                </div>
-                {item.model_number && (
-                  <p className="text-sm text-gray-500">Model: {item.model_number}</p>
-                )}
-              </div>
-              
-              {item.rentals.length > 0 ? (
-                <div className="divide-y divide-gray-200">
-                  {item.rentals.map(rental => (
-                    <div key={rental.id} className="px-4 py-3">
-                      <p className="font-medium text-gray-900">{rental.student.name}</p>
-                      <p className="text-sm text-gray-500">
-                        Serial: {rental.serial_number.serial_number}
-                      </p>
-                      <div className="flex items-center mt-1">
-                        <Clock className="h-4 w-4 text-gray-400 mr-1" />
-                        <span className="text-sm text-gray-500">
-                          Due: {new Date(rental.due_date).toLocaleDateString()}
-                        </span>
-                        <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          isOverdue(rental.due_date)
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {isOverdue(rental.due_date) ? 'Overdue' : 'Active'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-4 py-3 text-sm text-gray-500">
-                  No active rentals
-                </div>
-              )}
+
+      <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Student
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Items Rented
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {(() => {
+              // Filter items for the selected subcategory
+              const filtered = items.filter(item => item.product.subCategory === selectedSubCategory);
+              // Group by student
+              const studentMap: Record<string, { name: string, count: number, productIds: string[], rentalIds: string[], dueDates: string[], issueDates: string[] }> = {};
+              filtered.forEach(item => {
+                item.rentals.forEach((rental: any) => {
+                  if (!studentMap[rental.studentId]) {
+                    studentMap[rental.studentId] = {
+                      name: rental.studentName,
+                      count: 0,
+                      productIds: [],
+                      rentalIds: [],
+                      dueDates: [],
+                      issueDates: []
+                    };
+                  }
+                  studentMap[rental.studentId].count += 1;
+                  studentMap[rental.studentId].productIds.push(item.product.id);
+                  studentMap[rental.studentId].rentalIds.push(rental.serialNumber);
+                  studentMap[rental.studentId].dueDates.push(rental.dueDate);
+                  studentMap[rental.studentId].issueDates.push(rental.issuedDate);
+                });
+              });
+              return Object.entries(studentMap).map(([studentId, info]) => (
+                <tr key={studentId} className="cursor-pointer hover:bg-gray-50" onClick={() => onStudentClick(studentId)}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-700">
+                    {info.name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {selectedSubCategory} x{info.count}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {/* Optionally, you can add a button to return all or show details */}
+                  </td>
+                </tr>
+              ));
+            })()}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Return Modal */}
+      {showReturnModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Confirm Return</h3>
+            <p className="text-gray-600 mb-4">Are you sure you want to return this item?</p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowReturnModal(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const item = items.find(i => i.product.id === showReturnModal);
+                  if (item) {
+                    handleReturnConfirm(item.product.id, item.rentals[0].serialNumber);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-md"
+              >
+                Confirm Return
+              </button>
             </div>
-          ))}
+          </div>
         </div>
       )}
     </div>

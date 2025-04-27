@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, Search, ShoppingCart, User, LogOut, CircuitBoard } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,6 +10,7 @@ const Header: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -42,25 +43,23 @@ const Header: React.FC = () => {
   // Handle clicking outside of dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      // Only close if clicking outside the profile menu
-      if (showDropdown && !target.closest('.profile-menu')) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showDropdown]);
+  }, []);
 
   return (
     <header className={`fixed w-full top-0 z-50 ${headerClass}`}>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center py-4">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
-            <CircuitBoard className="h-8 w-8 text-primary-600" />
-            <span className="text-xl font-bold text-gray-900">TechRental</span>
+          <Link to="/" className="flex items-center space-x-1">
+            <img src="/Eandtc.png" alt="EnTC Logo" className="h-14 w-27 -mt-2" />
+            <span className="text-xl font-bold text-gray-900 -mt-2">Department Of EnTC</span>
           </Link>
 
           {/* Desktop Navigation */}
@@ -90,7 +89,7 @@ const Header: React.FC = () => {
             </button>
             
             {isAuthenticated ? (
-              <div className="relative profile-menu">
+              <div className="relative" ref={dropdownRef}>
                 <button 
                   className="flex items-center space-x-1 text-gray-600 hover:text-primary-600 transition-colors"
                   onClick={() => setShowDropdown(!showDropdown)}
@@ -99,7 +98,7 @@ const Header: React.FC = () => {
                   <span className="text-sm font-medium">{user?.name.split(' ')[0]}</span>
                 </button>
                 {showDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5">
+                  <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-50">
                     {user?.role === 'student' && (
                       <Link 
                         to="/dashboard" 

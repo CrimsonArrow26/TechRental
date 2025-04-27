@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useInventory } from '../contexts/InventoryContext';
-import { CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Clock, AlertTriangle } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { getStudentRentals, returnProduct } = useInventory();
-  const [returnSuccess, setReturnSuccess] = useState<string | null>(null);
+  const { getStudentRentals } = useInventory();
   
   if (!user) {
     return null; // Should be handled by ProtectedRoute
@@ -37,32 +36,13 @@ const StudentDashboard: React.FC = () => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
   
-  const handleReturn = (productId: string, serialNumber: string) => {
-    returnProduct(productId, serialNumber);
-    setReturnSuccess(`Successfully returned item with serial number: ${serialNumber}`);
-    
-    // Clear success message after 3 seconds
-    setTimeout(() => {
-      setReturnSuccess(null);
-    }, 3000);
-  };
-  
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">My Dashboard</h1>
         <p className="text-gray-600 mb-8">
-          Manage your rentals and view your rental history.
+          View your current rentals and rental history.
         </p>
-        
-        {returnSuccess && (
-          <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
-            <div className="flex">
-              <CheckCircle className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-              <p className="text-green-700">{returnSuccess}</p>
-            </div>
-          </div>
-        )}
         
         <div className="bg-white rounded-lg shadow-md overflow-hidden mb-8">
           <div className="border-b border-gray-200 px-6 py-4">
@@ -107,7 +87,7 @@ const StudentDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="divide-y divide-gray-200">
-              {sortedRentals.map((rental, index) => {
+              {sortedRentals.map((rental) => {
                 const daysLeft = getDaysLeft(rental.dueDate);
                 const overdueStatus = isOverdue(rental.dueDate);
                 
@@ -158,8 +138,6 @@ const StudentDashboard: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                      
-                      {/* Return button removed as per requirements */}
                     </div>
                   </div>
                 );

@@ -6,6 +6,7 @@ import StudentManagement from '../components/admin/StudentManagement';
 const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'rentals' | 'students'>('rentals');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -67,9 +68,18 @@ const AdminDashboard: React.FC = () => {
 
         {/* Content */}
         {activeTab === 'rentals' ? (
-          <ActiveRentals />
+          <ActiveRentals 
+            onStudentClick={(studentId: string) => {
+              setSelectedStudentId(studentId);
+              setActiveTab('students');
+            }}
+          />
         ) : (
-          <StudentManagement searchQuery={searchQuery} />
+          <StudentManagement 
+            searchQuery={searchQuery} 
+            selectedStudentId={selectedStudentId}
+            setSelectedStudentId={setSelectedStudentId}
+          />
         )}
       </div>
     </div>

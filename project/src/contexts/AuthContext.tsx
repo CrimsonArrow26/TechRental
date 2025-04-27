@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { signInWithRegistration } from '../lib/supabase';
 
 type UserRole = 'student' | 'staff' | 'admin';
 
@@ -42,22 +43,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (emailOrReg: string, password: string) => {
     setIsLoading(true);
-    // Simulate API call
-    return new Promise<void>((resolve, reject) => {
-      setTimeout(() => {
-        const foundUser = sampleUsers.find(u => u.email === email);
-        if (foundUser) {
-          setUser(foundUser);
-          localStorage.setItem('user', JSON.stringify(foundUser));
-          resolve();
-        } else {
-          reject(new Error('Invalid credentials'));
-        }
-        setIsLoading(false);
-      }, 1000);
-    });
+    try {
+      // Try student login with registration number
+      const user = await signInWithRegistration(emailOrReg, password);
+      setUser(user);
+      localStorage.setItem('user', JSON.stringify(user));
+      setIsLoading(false);
+      return;
+    } catch (studentErr) {
+      // fallback to staff/admin login (if needed, not implemented here)
+      setIsLoading(false);
+      throw studentErr;
+    }
   };
 
   const register = async (name: string, email: string, password: string, role: UserRole, serialId?: string) => {

@@ -30,7 +30,7 @@ interface InventoryContextType {
   isLoading: boolean;
   getProduct: (id: string) => Product | undefined;
   updateProductQuantity: (id: string, newQuantity: number) => void;
-  rentProduct: (productId: string, studentId: string, dueDate: string) => Promise<string>;
+  rentProduct: (productId: string, studentId: string, dueDate: string, serialNumber: string) => Promise<string>;
   returnProduct: (productId: string, serialNumber: string) => void;
   getStudentRentals: (studentId: string) => { 
     product: Product; 
@@ -49,6 +49,7 @@ interface InventoryContextType {
       dueDate: string;
     }[];
   }[];
+  handleReturnItem: (productId: string, serialNumber: string) => void;
 }
 
 // Sample products with updated structure
@@ -110,7 +111,7 @@ const categories = [
 ];
 
 // Sample student data
-const studentData: Record<string, { name: string }> = {
+export const studentData: Record<string, { name: string }> = {
   '1': { name: 'Prathamesh Yewale' },
   '2': { name: 'Utkarsh Yadav' },
   '3': { name: 'Harshad Kalane' },
@@ -146,6 +147,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       satisfactionRate: 95, // This would come from a review system in a real app
       totalStudents
     });
+
+    // Set loading to false after initializing data
+    setIsLoading(false);
   }, [products]);
 
   const getProduct = (id: string) => {
@@ -191,7 +195,12 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     );
   };
 
-  const rentProduct = async (productId: string, studentId: string, dueDate: string) => {
+  const rentProduct = async (
+    productId: string,
+    studentId: string,
+    dueDate: string,
+    serialNumber: string
+  ) => {
     const product = products.find(p => p.id === productId);
     if (!product || product.availableQuantity <= 0) {
       throw new Error('Product not available for rent');
@@ -205,7 +214,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       throw new Error('No available units to rent');
     }
 
-    const serialNumber = availableSerialNumbers[0];
     const issuedDate = new Date().toISOString().split('T')[0];
 
     setProducts(prevProducts =>
@@ -273,6 +281,22 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }));
   };
 
+  const handleReturnItem = (productId: string, serialNumber: string) => {
+    setProducts(prevProducts => 
+      prevProducts.map(product => {
+        if (product.id === productId) {
+          return {
+            ...product,
+            rentedSerialNumbers: product.rentedSerialNumbers.filter(
+              rental => rental.serialNumber !== serialNumber
+            )
+          };
+        }
+        return product;
+      })
+    );
+  };
+
   return (
     <InventoryContext.Provider
       value={{
@@ -287,6 +311,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         getStudentRentals,
         getProductsByCategory,
         getRentalsByCategory,
+        handleReturnItem
       }}
     >
       {children}

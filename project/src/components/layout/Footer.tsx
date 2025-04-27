@@ -10,7 +10,7 @@ const Footer: React.FC = () => {
           <div>
             <div className="flex items-center space-x-2 mb-4">
               <CircuitBoard className="h-8 w-8 text-primary-500" />
-              <span className="text-xl font-bold">TechRental</span>
+              <span className="text-xl font-bold">Department of Electronics and Telecommunication</span>
             </div>
             <p className="text-gray-400 mb-4">
               Your college electronics rental portal for easy access to the
@@ -187,7 +187,7 @@ const Footer: React.FC = () => {
 
         <div className="border-t border-gray-800 mt-12 pt-8">
           <p className="text-center text-gray-400 text-sm">
-            &copy; {new Date().getFullYear()} TechRental. All rights reserved.
+            &copy; {new Date().getFullYear()} Department of Electronics and Telecommunication. All rights reserved.
           </p>
         </div>
       </div>
