@@ -1,27 +1,42 @@
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+type UserRole = 'student' | 'staff' | 'admin';
+
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  registrationNumber?: string;
+}
+
 export const signInWithRegistration = async (
   registrationNumber: string,
   password: string
 ): Promise<AuthUser> => {
-  // 1. Lookup student by registration number
   const { data: student, error: studentError } = await supabase
     .from('students')
-    .select('email, id, name, registration_number')
+    .select('*')
     .eq('registration_number', registrationNumber)
     .single();
 
-  if (studentError || !student) {
+  if (studentError) {
     throw new Error('Invalid credentials');
   }
 
-  // 2. Use Supabase Auth to sign in with the student's email
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: student.email,
-    password,
-  });
-
-  if (authError || !authData.user) {
+  if (password !== student.password_hash) {
     throw new Error('Invalid credentials');
   }
+
+  await supabase
+    .from('students')
+    .update({ last_login: new Date().toISOString() })
+    .eq('id', student.id);
 
   return {
     id: student.id,
@@ -36,22 +51,34 @@ export const signInWithEmail = async (
   email: string,
   password: string
 ): Promise<AuthUser> => {
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data: staff, error: staffError } = await supabase
+    .from('staff')
+    .select('*')
+    .eq('email', email)
+    .single();
 
-  if (authError || !authData.user) {
+  if (staffError) {
     throw new Error('Invalid credentials');
   }
 
-  // Optionally, fetch staff/admin details from your table if you need more info
-  // const { data: staff } = await supabase.from('staff').select('*').eq('email', email).single();
+  // Check against the new password_user column
+  if (password !== staff.password_user) {
+    throw new Error('Invalid credentials');
+  }
+
+  // Update last login
+  await supabase
+    .from('staff')
+    .update({ last_login: new Date().toISOString() })
+    .eq('id', staff.id);
+
+  // Ensure the role is either 'staff' or 'admin'
+  const role = staff.role === 'admin' ? 'admin' : 'staff';
 
   return {
-    id: authData.user.id,
-    name: authData.user.user_metadata?.name || '',
-    email: authData.user.email,
-    role: authData.user.user_metadata?.role || 'staff', // or fetch from your table
+    id: staff.id,
+    name: staff.name,
+    email: staff.email,
+    role: role,
   };
 }; 

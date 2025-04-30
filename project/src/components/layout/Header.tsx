@@ -59,7 +59,7 @@ const Header: React.FC = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-1">
             <img src="/Eandtc.png" alt="EnTC Logo" className="h-14 w-27 -mt-2" />
-            <span className="text-xl font-bold text-gray-900 -mt-2">Department Of EnTC</span>
+            <span className="text-xl font-bold text-gray-900 -mt-2">Department Of E&TC</span>
           </Link>
 
           {/* Desktop Navigation */}
